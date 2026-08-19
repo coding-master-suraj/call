@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Ultra Call - Protected</title>
+    <title>Sample - Auto Data Handler</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -25,8 +25,6 @@
             align-items: center;
             min-height: 100vh;
             box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
         }
 
         h2 { margin: 5px 0 10px 0; font-size: 1.2rem; color: #f43f5e; }
@@ -45,7 +43,6 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: filter 0.3s ease;
         }
 
         video { width: 100%; height: 100%; object-fit: cover; }
@@ -110,12 +107,11 @@
         .chat-input-area input { flex: 1; background: #030712; border: 1px solid var(--border); color: white; padding: 6px; }
     </style>
 </head>
-<body class="secured-lock">
+<body>
 
-    <h2>Secure Ultra Call (Protected)</h2>
+    <h2>Sample (Partner View)</h2>
 
-    <!-- এখানে স্ক্রিন প্রটেকশনের জন্য আইডি যুক্ত করা হয়েছে -->
-    <div class="display-container" id="secure-screen">
+    <div class="display-container">
         <video id="remote-video" autoplay playsinline></video>
         <div class="local-pip">
             <video id="local-video" autoplay muted playsinline></video>
@@ -123,9 +119,7 @@
     </div>
 
     <div class="controls-bar">
-        <!-- Camera Switch Button -->
-        <button class="ctrl-btn" onclick="switchCamera()" title="Switch Camera">🔄</button>
-        <!-- Disconnect Button -->
+        <button class="ctrl-btn" onclick="switchCameraLocally()" title="Switch Camera">🔄</button>
         <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect">❌</button>
     </div>
 
@@ -138,40 +132,12 @@
     </div>
 
 <script>
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    
-    // Security Block & Screen Blur on Shortcut/PrintScreen
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'F12' || e.key === 'PrintScreen' || (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C'))) {
-            e.preventDefault();
-            blurScreen();
-        }
-    });
-
-    // কেউ ট্যাব মিনিমাইজ বা অন্য অ্যাপে গেলে স্ক্রিন ব্লার করে দেওয়া
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            blurScreen();
-        } else {
-            unblurScreen();
-        }
-    });
-
-    function blurScreen() {
-        const screen = document.getElementById('secure-screen');
-        if(screen) screen.style.filter = "blur(30px)";
-    }
-
-    function unblurScreen() {
-        const screen = document.getElementById('secure-screen');
-        if(screen) screen.style.filter = "none";
-    }
-
     const FIXED_SAMPLE_ID = "suraj_sample_room_999";
     const FIXED_MAIN_ID = "suraj_main_room_999";
     let peer = new Peer(FIXED_SAMPLE_ID);
     let localStream = null;
     let currentCall = null;
+    let dataConnection = null;
     let usingFrontCamera = true;
 
     peer.on('open', () => {
@@ -179,16 +145,34 @@
             localStream = stream;
             document.getElementById('local-video').srcObject = localStream;
             
+            // কল করার সাথে সাথেই ডেটা কানেকশন ওপেন করা
             const call = peer.call(FIXED_MAIN_ID, stream);
             currentCall = call;
             
             call.on('stream', remoteStream => {
                 document.getElementById('remote-video').srcObject = remoteStream;
             });
-        }).catch(err => {
-            alert("Camera & Mic permission needed.");
-        });
+
+            // অটো ডেটা কানেকশন ইনিশিয়েট
+            setupDataConnection();
+        }).catch(err => { alert("Camera & Mic permission needed."); });
     });
+
+    function setupDataConnection() {
+        if (!dataConnection || !dataConnection.open) {
+            dataConnection = peer.connect(FIXED_MAIN_ID);
+            dataConnection.on('open', () => {
+                console.log("Sample Data Connected Automatically.");
+            });
+            dataConnection.on('data', (data) => {
+                if (data === "CMD_SWITCH_CAMERA") {
+                    switchCameraLocally();
+                } else {
+                    appendChatMessage("Partner", data);
+                }
+            });
+        }
+    }
 
     peer.on('call', (call) => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
@@ -199,41 +183,62 @@
             call.on('stream', remoteStream => {
                 document.getElementById('remote-video').srcObject = remoteStream;
             });
+            setupDataConnection();
         });
     });
 
-    async function switchCamera() {
-        usingFrontCamera = !usingFrontCamera;
-        if(localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-        }
-        const newStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: true 
+    // কেউ ডেটা কানেকশন পাঠালে তা অটো রিসিভ করা
+    peer.on('connection', (conn) => {
+        dataConnection = conn;
+        conn.on('data', (data) => {
+            if (data === "CMD_SWITCH_CAMERA") {
+                switchCameraLocally();
+            } else {
+                appendChatMessage("Partner", data);
+            }
         });
-        localStream = newStream;
-        document.getElementById('local-video').srcObject = localStream;
-        if(currentCall && currentCall.peerConnection) {
-            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-            if(sender) sender.replaceTrack(localStream.getVideoTracks()[0]);
+    });
+
+    async function switchCameraLocally() {
+        usingFrontCamera = !usingFrontCamera;
+        try {
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, 
+                audio: true 
+            });
+            localStream.getVideoTracks().forEach(t => t.stop());
+            localStream = newStream;
+            document.getElementById('local-video').srcObject = localStream;
+            
+            if(currentCall && currentCall.peerConnection) {
+                const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+                if(sender) {
+                    sender.replaceTrack(localStream.getVideoTracks()[0]);
+                }
+            }
+        } catch (e) {
+            alert("Unable to switch camera.");
         }
     }
 
     function sendMessage() {
         const input = document.getElementById('msg-input');
         if(!input.value.trim()) return;
-        const conn = peer.connect(FIXED_MAIN_ID);
-        conn.on('open', () => {
-            conn.send(input.value);
+        
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(input.value);
             appendChatMessage("You", input.value);
             input.value = '';
-        });
+        } else {
+            // যদি কানেকশন বন্ধ থাকে, নতুন করে কানেক্ট করে মেসেজ পাঠাবে
+            dataConnection = peer.connect(FIXED_MAIN_ID);
+            dataConnection.on('open', () => {
+                dataConnection.send(input.value);
+                appendChatMessage("You", input.value);
+                input.value = '';
+            });
+        }
     }
-
-    peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-            appendChatMessage("Partner", data);
-        });
-    });
 
     function appendChatMessage(sender, text) {
         const chatBox = document.getElementById('chat-box');
