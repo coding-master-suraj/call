@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Ultra Call - Sample</title>
+    <title>Secure Ultra Call - Protected</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -45,6 +45,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            transition: filter 0.3s ease;
         }
 
         video { width: 100%; height: 100%; object-fit: cover; }
@@ -111,8 +112,9 @@
 </head>
 <body class="secured-lock">
 
-    <h2>Secure Ultra Call (Sample)</h2>
+    <h2>Secure Ultra Call (Protected)</h2>
 
+    <!-- এখানে স্ক্রিন প্রটেকশনের জন্য আইডি যুক্ত করা হয়েছে -->
     <div class="display-container" id="secure-screen">
         <video id="remote-video" autoplay playsinline></video>
         <div class="local-pip">
@@ -138,13 +140,32 @@
 <script>
     document.addEventListener('contextmenu', e => e.preventDefault());
     
-    // Security Block
+    // Security Block & Screen Blur on Shortcut/PrintScreen
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'F12' || (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C'))) {
+        if (e.key === 'F12' || e.key === 'PrintScreen' || (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C'))) {
             e.preventDefault();
-            document.getElementById('secure-screen').style.filter = "blur(20px)";
+            blurScreen();
         }
     });
+
+    // কেউ ট্যাব মিনিমাইজ বা অন্য অ্যাপে গেলে স্ক্রিন ব্লার করে দেওয়া
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            blurScreen();
+        } else {
+            unblurScreen();
+        }
+    });
+
+    function blurScreen() {
+        const screen = document.getElementById('secure-screen');
+        if(screen) screen.style.filter = "blur(30px)";
+    }
+
+    function unblurScreen() {
+        const screen = document.getElementById('secure-screen');
+        if(screen) screen.style.filter = "none";
+    }
 
     const FIXED_SAMPLE_ID = "suraj_sample_room_999";
     const FIXED_MAIN_ID = "suraj_main_room_999";
@@ -158,7 +179,6 @@
             localStream = stream;
             document.getElementById('local-video').srcObject = localStream;
             
-            // মেইন আইডিতে কল পাঠানো হচ্ছে
             const call = peer.call(FIXED_MAIN_ID, stream);
             currentCall = call;
             
@@ -170,7 +190,6 @@
         });
     });
 
-    // যদি মেইন ডিভাইস থেকে কল ব্যাক আসে তা রিসিভ করার হ্যান্ডলার
     peer.on('call', (call) => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
             localStream = stream;
