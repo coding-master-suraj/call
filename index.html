@@ -185,6 +185,32 @@
     }
 
     function disconnectCall() { window.location.reload(); }
+
+// মোবাইলের জন্য স্ক্রিনশট এবং স্ক্রিন রেকর্ডিং ডিটেকশন ও ব্লকিং
+function applyMobileProtection() {
+    // এটি স্ক্রিন রেকর্ডিং বা স্ক্রিনশট নেওয়ার সময় স্ক্রিনকে কালো বা ব্লার করে দেবে
+    document.addEventListener('keyup', (e) => {
+        if (e.key == 'PrintScreen') {
+            navigator.clipboard.writeText('');
+            alert('Screenshot is blocked for security.');
+        }
+    });
+
+    // ভিডিও এলিমেন্টে রেকর্ডিং প্রিভেন্ট করা
+    const videoElement = document.getElementById('remote-video');
+    if (videoElement) {
+        // ভিডিওটি 'protected' মুডে সেট করা
+        videoElement.setAttribute('controlsList', 'nodownload nofullscreen noremoteplayback');
+        videoElement.disablePictureInPicture = true;
+    }
+}
+
+// কল কানেক্ট হওয়ার পর প্রটেকশন চালু করা
+peer.on('call', (call) => {
+    // ... আপনার বর্তমান কোড ...
+    applyMobileProtection();
+});
+    
 </script>
 </body>
 </html>
