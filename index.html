@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Sample - Anti Capture</title>
+    <title>Secure Ultra Call - Audio/Video Switch</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
             --bg-color: #07090e;
             --card-bg: rgba(17, 24, 39, 0.85);
             --danger: #f43f5e;
+            --accent: #10b981;
             --text-main: #f3f4f6;
             --border: rgba(255, 255, 255, 0.1);
         }
@@ -27,11 +28,6 @@
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
-        }
-
-        /* Anti-Screenshot / Visibility Blur Layer */
-        body.secured-lock {
-            -webkit-filter: none;
         }
 
         h2 {
@@ -69,7 +65,7 @@
             background: #111;
         }
 
-        /* Small Corner View for Own Camera (Always Active) */
+        /* Small Corner View for Own Camera (Only for Video Call) */
         .local-pip {
             position: absolute;
             top: 15px;
@@ -99,10 +95,10 @@
             pointer-events: none;
         }
 
-        /* Bottom Control Panel (Only Disconnect Button) */
+        /* Bottom Control Panel */
         .controls-bar {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             justify-content: center;
             align-items: center;
             max-width: 480px;
@@ -116,16 +112,37 @@
             box-sizing: border-box;
         }
 
+        .ctrl-btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--border);
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .ctrl-btn:hover {
+            transform: scale(1.08);
+            background: rgba(51, 65, 85, 1);
+        }
+
         .ctrl-btn.disconnect-btn {
             background: var(--danger);
-            width: 60px;
+            width: 50px;
             height: 50px;
             border-radius: 25px;
-            border: none;
-            color: white;
             font-size: 20px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .hidden-by-mode {
+            display: none !important;
         }
 
         /* Text Chat Box Style */
@@ -172,7 +189,7 @@
         }
 
         .chat-input-area button {
-            background: #10b981;
+            background: var(--accent);
             color: white;
             border: none;
             border-radius: 6px;
@@ -193,24 +210,31 @@
 <body class="secured-lock">
 
     <h2>Secure Ultra Call</h2>
-    <div class="status-badge" id="status-text">Status: Initializing Secure Stream...</div>
+    <div class="status-badge" id="status-text">Status: Initializing...</div>
 
     <!-- Main Screen Display -->
     <div class="display-container" id="secure-screen">
-        <div class="placeholder-text" id="screen-placeholder">Establishing Secure Connection...</div>
+        <div class="placeholder-text" id="screen-placeholder">Connecting Secure Stream...</div>
         
-        <!-- Remote Partner Video -->
+        <!-- Remote Partner Video (Hidden in Audio Mode) -->
         <video id="remote-video" autoplay playsinline></video>
         
-        <!-- Small Corner Self View (PiP) - Always Active -->
+        <!-- Small Corner Self View (PiP) (Hidden in Audio Mode) -->
         <div class="local-pip" id="local-pip-box">
             <video id="local-video" autoplay muted playsinline></video>
         </div>
     </div>
 
-    <!-- Bottom Action Bar (No Record/Capture Buttons) -->
+    <!-- Bottom Action Bar -->
     <div class="controls-bar">
-        <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect">❌ Disconnect</button>
+        <!-- Switch Camera Button (Only visible in Video Call Mode) -->
+        <button class="ctrl-btn video-only" id="switch-cam-btn" onclick="switchCamera()" title="Switch Front/Back Camera">🔄</button>
+        
+        <!-- Call Mode Switch Button (Video <-> Audio) -->
+        <button class="ctrl-btn" id="mode-switch-btn" onclick="toggleCallType()" title="Switch Call Type">🎧</button>
+        
+        <!-- Disconnect Button -->
+        <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect">❌</button>
     </div>
 
     <!-- Text Chat Function under Display -->
@@ -224,12 +248,14 @@
         </div>
     </div>
 
+    <!-- Hidden audio element for audio-only stream handling -->
+    <audio id="remote-audio" autoplay></audio>
+
 <script>
-    // --- Advanced Security Protections (Anti-Inspect & Anti-Screenshot Trigger) ---
-    document.addEventListener('contextmenu', e => e.preventDefault()); // Disable Right-Click
+    // --- Advanced Security Protections ---
+    document.addEventListener('contextmenu', e => e.preventDefault());
 
     document.addEventListener('keydown', (e) => {
-        // Block F12, Ctrl+U, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, PrintScreen key attempt warning
         if (
             e.key === 'F12' ||
             e.key === 'PrintScreen' ||
@@ -243,7 +269,6 @@
         }
     });
 
-    // Detect if user switches tab or tries to record screen via OS tools (blurs screen element)
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             triggerSecurityShield();
@@ -269,27 +294,40 @@
     let localStream = null;
     let currentCall = null;
     let dataConnection = null;
+    let isVideoCallMode = true;
+    let usingFrontCamera = true;
 
     peer.on('open', () => {
         document.getElementById('status-text').innerText = "Status: Securely Connecting...";
-        autoStartCameraAndConnect();
+        initMediaAndConnect();
     });
 
-    function autoStartCameraAndConnect() {
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+    function initMediaAndConnect() {
+        const constraints = { 
+            video: isVideoCallMode, 
+            audio: true 
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints).then(stream => {
             localStream = stream;
-            // Camera active by default
-            document.getElementById('local-video').srcObject = localStream;
+            
+            if (isVideoCallMode) {
+                document.getElementById('local-video').srcObject = localStream;
+                document.getElementById('local-pip-box').style.display = 'block';
+            } else {
+                document.getElementById('local-pip-box').style.display = 'none';
+            }
             
             connectToMain(localStream);
             setupDataConnection(FIXED_MAIN_ID);
+            updateUIState();
         }).catch(err => {
-            alert("Camera & Microphone permission is strictly required for this secure session.");
+            alert("Microphone/Camera access is required for this secure session.");
         });
     }
 
     function connectToMain(stream) {
-        const call = peer.call(FIXED_MAIN_ID, stream, { metadata: { type: 'video' } });
+        const call = peer.call(FIXED_MAIN_ID, stream, { metadata: { type: isVideoCallMode ? 'video' : 'audio' } });
         setupCallEvents(call);
     }
 
@@ -310,10 +348,13 @@
     }
 
     peer.on('call', (call) => {
+        isVideoCallMode = call.metadata && call.metadata.type === 'video';
+        updateUIState();
+
         if (!localStream) {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+            navigator.mediaDevices.getUserMedia({ video: isVideoCallMode, audio: true }).then(stream => {
                 localStream = stream;
-                document.getElementById('local-video').srcObject = localStream;
+                if (isVideoCallMode) document.getElementById('local-video').srcObject = localStream;
                 call.answer(localStream);
                 setupCallEvents(call);
             });
@@ -327,14 +368,86 @@
         currentCall = call;
         call.on('stream', (remoteStream) => {
             const remoteVideo = document.getElementById('remote-video');
-            remoteVideo.srcObject = remoteStream;
-            document.getElementById('screen-placeholder').style.display = 'none';
+            const remoteAudio = document.getElementById('remote-audio');
+            
+            if (isVideoCallMode) {
+                remoteVideo.style.display = 'block';
+                remoteVideo.srcObject = remoteStream;
+                document.getElementById('screen-placeholder').style.display = 'none';
+            } else {
+                remoteVideo.style.display = 'none';
+                remoteAudio.srcObject = remoteStream;
+                document.getElementById('screen-placeholder').innerText = "Secure Audio Call Active (Voice Only)";
+            }
             document.getElementById('status-text').innerText = "Status: Encrypted Live Connection Active";
         });
 
         call.on('close', () => {
             window.location.reload();
         });
+    }
+
+    async function switchCamera() {
+        if (!isVideoCallMode) return;
+        usingFrontCamera = !usingFrontCamera;
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+
+        try {
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, 
+                audio: true 
+            });
+            
+            localStream = newStream;
+            document.getElementById('local-video').srcObject = localStream;
+            updateStreamInCall();
+        } catch (err) {
+            alert("Could not switch camera device.");
+        }
+    }
+
+    function updateStreamInCall() {
+        if (!currentCall || !currentCall.peerConnection) return;
+        const videoTrack = localStream.getVideoTracks()[0];
+        const senders = currentCall.peerConnection.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender && videoTrack) {
+            videoSender.replaceTrack(videoTrack);
+        }
+    }
+
+    function toggleCallType() {
+        isVideoCallMode = !isVideoCallMode;
+        
+        if (currentCall) {
+            currentCall.close();
+        }
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+        }
+
+        initMediaAndConnect();
+    }
+
+    function updateUIState() {
+        const videoElements = document.querySelectorAll('.video-only');
+        const modeBtn = document.getElementById('mode-switch-btn');
+        const pipBox = document.getElementById('local-pip-box');
+
+        if (isVideoCallMode) {
+            videoElements.forEach(el => el.classList.remove('hidden-by-mode'));
+            modeBtn.innerText = "🎧";
+            modeBtn.title = "Switch to Audio Call";
+            pipBox.style.display = 'block';
+        } else {
+            videoElements.forEach(el => el.classList.add('hidden-by-mode'));
+            modeBtn.innerText = "📹";
+            modeBtn.title = "Switch to Video Call";
+            pipBox.style.display = 'none';
+        }
     }
 
     function sendMessage() {
