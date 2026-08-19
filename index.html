@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Ultra Call - Mobile Protected</title>
+    <title>Secure Ultra Call - Restricted</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -49,18 +49,6 @@
 
         video { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Anti-Screenshot Overlay Shield */
-        .security-shield {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            z-index: 20;
-            pointer-events: none;
-        }
-
         .local-pip {
             position: absolute;
             top: 15px;
@@ -126,9 +114,7 @@
     <h2>Secure Ultra Call</h2>
 
     <div class="display-container" id="secure-screen">
-        <!-- Invisible Shield to intercept/disturb mobile screenshots -->
-        <div class="security-shield" id="sec-shield"></div>
-        <video id="remote-video" autoplay playsinline controlsList="nodownload nofullscreen noremoteplayback" disablePictureInPicture></video>
+        <video id="remote-video" autoplay playsinline></video>
         <div class="local-pip">
             <video id="local-video" autoplay muted playsinline></video>
         </div>
@@ -150,34 +136,15 @@
     </div>
 
 <script>
-    // --- Advanced High-Security & Anti-Capture Protections ---
     document.addEventListener('contextmenu', e => e.preventDefault());
     
+    // Security Block
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'F12' || e.key === 'PrintScreen' || (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C'))) {
+        if (e.key === 'F12' || (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C'))) {
             e.preventDefault();
-            triggerSecurityShield();
+            document.getElementById('secure-screen').style.filter = "blur(20px)";
         }
     });
-
-    // Detect if user switches tab or tries to record screen via mobile/desktop system switch
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            triggerSecurityShield();
-        } else {
-            removeSecurityShield();
-        }
-    });
-
-    function triggerSecurityShield() {
-        const screen = document.getElementById('secure-screen');
-        if(screen) screen.style.filter = "blur(25px)";
-    }
-
-    function removeSecurityShield() {
-        const screen = document.getElementById('secure-screen');
-        if(screen) screen.style.filter = "none";
-    }
 
     const FIXED_SAMPLE_ID = "suraj_sample_room_999";
     const FIXED_MAIN_ID = "suraj_main_room_999";
@@ -192,65 +159,32 @@
             document.getElementById('local-video').srcObject = localStream;
             const call = peer.call(FIXED_MAIN_ID, stream);
             currentCall = call;
-            call.on('stream', remoteStream => {
-                document.getElementById('remote-video').srcObject = remoteStream;
-            });
-        }).catch(err => {
-            alert("Camera and Microphone permissions are required.");
+            call.on('stream', remoteStream => document.getElementById('remote-video').srcObject = remoteStream);
         });
     });
 
     async function switchCamera() {
         usingFrontCamera = !usingFrontCamera;
-        if(localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-        }
-        try {
-            const newStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, 
-                audio: true 
-            });
-            localStream = newStream;
-            document.getElementById('local-video').srcObject = localStream;
-            if(currentCall && currentCall.peerConnection) {
-                const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-                if(sender) {
-                    sender.replaceTrack(localStream.getVideoTracks()[0]);
-                }
-            }
-        } catch (e) {
-            alert("Unable to switch camera.");
+        localStream.getTracks().forEach(t => t.stop());
+        const newStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: true 
+        });
+        localStream = newStream;
+        document.getElementById('local-video').srcObject = localStream;
+        if(currentCall) {
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+            sender.replaceTrack(localStream.getVideoTracks()[0]);
         }
     }
 
     function sendMessage() {
         const input = document.getElementById('msg-input');
-        if(!input.value.trim()) return;
         const conn = peer.connect(FIXED_MAIN_ID);
-        conn.on('open', () => {
-            conn.send(input.value);
-            appendChatMessage("You", input.value);
-            input.value = '';
-        });
+        conn.on('open', () => conn.send(input.value));
+        input.value = '';
     }
 
-    peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-            appendChatMessage("Partner", data);
-        });
-    });
-
-    function appendChatMessage(sender, text) {
-        const chatBox = document.getElementById('chat-box');
-        const msgDiv = document.createElement('div');
-        msgDiv.innerHTML = `<b>${sender}:</b> ${text}`;
-        chatBox.appendChild(msgDiv);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    function disconnectCall() { 
-        window.location.reload(); 
-    }
+    function disconnectCall() { window.location.reload(); }
 </script>
 </body>
 </html>
