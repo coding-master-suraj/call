@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Ultra Call - Restricted</title>
+    <title>Secure Ultra Call - Sample</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -111,7 +111,7 @@
 </head>
 <body class="secured-lock">
 
-    <h2>Secure Ultra Call</h2>
+    <h2>Secure Ultra Call (Sample)</h2>
 
     <div class="display-container" id="secure-screen">
         <video id="remote-video" autoplay playsinline></video>
@@ -157,60 +157,74 @@
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
             localStream = stream;
             document.getElementById('local-video').srcObject = localStream;
+            
+            // মেইন আইডিতে কল পাঠানো হচ্ছে
             const call = peer.call(FIXED_MAIN_ID, stream);
             currentCall = call;
-            call.on('stream', remoteStream => document.getElementById('remote-video').srcObject = remoteStream);
+            
+            call.on('stream', remoteStream => {
+                document.getElementById('remote-video').srcObject = remoteStream;
+            });
+        }).catch(err => {
+            alert("Camera & Mic permission needed.");
+        });
+    });
+
+    // যদি মেইন ডিভাইস থেকে কল ব্যাক আসে তা রিসিভ করার হ্যান্ডলার
+    peer.on('call', (call) => {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+            localStream = stream;
+            document.getElementById('local-video').srcObject = localStream;
+            call.answer(stream);
+            currentCall = call;
+            call.on('stream', remoteStream => {
+                document.getElementById('remote-video').srcObject = remoteStream;
+            });
         });
     });
 
     async function switchCamera() {
         usingFrontCamera = !usingFrontCamera;
-        localStream.getTracks().forEach(t => t.stop());
+        if(localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+        }
         const newStream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: true 
         });
         localStream = newStream;
         document.getElementById('local-video').srcObject = localStream;
-        if(currentCall) {
-            const sender = currentCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
-            sender.replaceTrack(localStream.getVideoTracks()[0]);
+        if(currentCall && currentCall.peerConnection) {
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if(sender) sender.replaceTrack(localStream.getVideoTracks()[0]);
         }
     }
 
     function sendMessage() {
         const input = document.getElementById('msg-input');
+        if(!input.value.trim()) return;
         const conn = peer.connect(FIXED_MAIN_ID);
-        conn.on('open', () => conn.send(input.value));
-        input.value = '';
+        conn.on('open', () => {
+            conn.send(input.value);
+            appendChatMessage("You", input.value);
+            input.value = '';
+        });
+    }
+
+    peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+            appendChatMessage("Partner", data);
+        });
+    });
+
+    function appendChatMessage(sender, text) {
+        const chatBox = document.getElementById('chat-box');
+        const msgDiv = document.createElement('div');
+        msgDiv.innerHTML = `<b>${sender}:</b> ${text}`;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     function disconnectCall() { window.location.reload(); }
-
-// মোবাইলের জন্য স্ক্রিনশট এবং স্ক্রিন রেকর্ডিং ডিটেকশন ও ব্লকিং
-function applyMobileProtection() {
-    // এটি স্ক্রিন রেকর্ডিং বা স্ক্রিনশট নেওয়ার সময় স্ক্রিনকে কালো বা ব্লার করে দেবে
-    document.addEventListener('keyup', (e) => {
-        if (e.key == 'PrintScreen') {
-            navigator.clipboard.writeText('');
-            alert('Screenshot is blocked for security.');
-        }
-    });
-
-    // ভিডিও এলিমেন্টে রেকর্ডিং প্রিভেন্ট করা
-    const videoElement = document.getElementById('remote-video');
-    if (videoElement) {
-        // ভিডিওটি 'protected' মুডে সেট করা
-        videoElement.setAttribute('controlsList', 'nodownload nofullscreen noremoteplayback');
-        videoElement.disablePictureInPicture = true;
-    }
-}
-
-// কল কানেক্ট হওয়ার পর প্রটেকশন চালু করা
-peer.on('call', (call) => {
-    // ... আপনার বর্তমান কোড ...
-    applyMobileProtection();
-});
-    
 </script>
 </body>
 </html>
