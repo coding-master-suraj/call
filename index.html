@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Main Connector - Auto Data Connect</title>
+    <title>Sample Partner - Auto Data Connect</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -105,7 +105,6 @@
             transition: all 0.2s;
         }
 
-        /* পার্টনার ক্যামেরা সুইচ বাটনটির বর্ডার ও সাইজ বড় করার জন্য নির্দিষ্ট স্টাইল */
         .ctrl-btn.partner-switch-btn {
             width: 56px;
             height: 42px;
@@ -175,12 +174,12 @@
 </head>
 <body>
 
-    <h2>Main Connector</h2>
+    <h2>Sample Partner</h2>
     <div class="status-badge" id="status-text">Status: Connecting to Server...</div>
 
     <div id="active-call-container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
         <div class="display-container">
-            <div class="placeholder-text" id="screen-placeholder">Camera is Off / Waiting for Partner</div>
+            <div class="placeholder-text" id="screen-placeholder">Camera is Off / Waiting for Main</div>
             <video id="remote-video" autoplay playsinline></video>
             <div class="local-pip" id="local-pip-box">
                 <video id="local-video" autoplay muted playsinline></video>
@@ -190,7 +189,7 @@
         <div class="controls-bar" id="controls-bar">
             <button class="ctrl-btn" id="cam-toggle-btn" onclick="toggleCamera()" title="Camera On/Off">📷</button>
             <button class="ctrl-btn" onclick="switchCamera()" title="Switch Own Camera">🔄</button>
-            <button class="ctrl-btn partner-switch-btn" onclick="switchPartnerCamera()" title="Switch Partner Camera">🔄👥</button>
+            <button class="ctrl-btn partner-switch-btn" onclick="switchPartnerCamera()" title="Switch Main Camera">🔄👥</button>
             <button class="ctrl-btn" id="rec-btn" onclick="toggleRecord()" title="Record Video">⏺️</button>
             <button class="ctrl-btn" onclick="capturePhoto()" title="Capture Photo">📸</button>
             <button class="ctrl-btn" id="mic-toggle-btn" onclick="toggleMic()" title="Mute/Unmute Voice">🎤</button>
@@ -215,10 +214,10 @@
     </div>
 
 <script>
-    const FIXED_MAIN_ID = "suraj_sample_room_999";
-    const FIXED_SAMPLE_ID = "suraj_main_room_999";
-  
-    let peer = new Peer(FIXED_MAIN_ID);
+    const FIXED_SAMPLE_ID = "suraj_sample_room_999";
+    const FIXED_MAIN_ID = "suraj_main_room_999";
+
+    let peer = new Peer(FIXED_SAMPLE_ID);
     let localStream = null;
     let currentCall = null;
     let dataConnection = null;
@@ -230,24 +229,27 @@
     let recordedChunks = [];
 
     peer.on('open', () => {
-        document.getElementById('status-text').innerText = "Status: Ready & Waiting for Sample...";
-        setTimeout(autoConnect, 2000);
+        document.getElementById('status-text').innerText = "Status: Ready & Connecting Automatically...";
+        autoStartEverything();
     });
 
-    function autoConnect() {
+    function autoStartEverything() {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
             localStream = stream;
             localStream.getVideoTracks().forEach(t => t.enabled = false);
-            connectToSampleAndData(localStream);
-        }).catch(err => console.log("Media init error:", err));
+            connectToMainAndData(localStream);
+        }).catch(err => {
+            console.log("Media permission error:", err);
+            document.getElementById('status-text').innerText = "Status: Camera/Mic permission needed!";
+        });
     }
 
-    function connectToSampleAndData(stream) {
-        const call = peer.call(FIXED_SAMPLE_ID, stream);
+    function connectToMainAndData(stream) {
+        const call = peer.call(FIXED_MAIN_ID, stream);
         setupCallEvents(call);
 
         if (!dataConnection || !dataConnection.open) {
-            dataConnection = peer.connect(FIXED_SAMPLE_ID);
+            dataConnection = peer.connect(FIXED_MAIN_ID);
             setupDataEvents(dataConnection);
         }
     }
@@ -258,7 +260,11 @@
             console.log("Data connection established automatically.");
         });
         conn.on('data', (data) => {
-            appendChatMessage("Partner", data);
+            if (data === "CMD_SWITCH_CAMERA") {
+                switchCamera();
+            } else {
+                appendChatMessage("Main", data);
+            }
         });
     }
 
@@ -270,7 +276,7 @@
         if (dataConnection && dataConnection.open) {
             dataConnection.send("CMD_SWITCH_CAMERA");
         } else {
-            dataConnection = peer.connect(FIXED_SAMPLE_ID);
+            dataConnection = peer.connect(FIXED_MAIN_ID);
             dataConnection.on('open', () => {
                 dataConnection.send("CMD_SWITCH_CAMERA");
             });
@@ -279,7 +285,7 @@
 
     peer.on('call', (call) => {
         if (!dataConnection || !dataConnection.open) {
-            dataConnection = peer.connect(FIXED_SAMPLE_ID);
+            dataConnection = peer.connect(FIXED_MAIN_ID);
             setupDataEvents(dataConnection);
         }
 
@@ -302,7 +308,7 @@
             const remoteVideo = document.getElementById('remote-video');
             remoteVideo.srcObject = remoteStream;
             document.getElementById('screen-placeholder').style.display = 'none';
-            document.getElementById('status-text').innerText = "Status: Connected Successfull....";
+            document.getElementById('status-text').innerText = "Status: Connected Successfully!";
         });
 
         call.on('close', () => { triggerShutdown(); });
@@ -424,7 +430,7 @@
             dataConnection.send(text);
             appendChatMessage("You", text);
             input.value = '';
-        } else { alert("Partner not connected for text messaging yet."); }
+        } else { alert("Main not connected for text messaging yet."); }
     }
 
     function handleKeyPress(e) { if (e.key === 'Enter') { sendMessage(); } }
