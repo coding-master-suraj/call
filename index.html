@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sample Partner - Auto Data Connect</title>
+    <title>Partner call</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -188,9 +188,6 @@
         <div class="controls-bar" id="controls-bar">
             <button class="ctrl-btn active" id="cam-toggle-btn" onclick="toggleCamera()" title="Camera On/Off">📷</button>
             <button class="ctrl-btn" onclick="switchCamera()" title="Switch Own Camera">🔄</button>
-            <button class="ctrl-btn partner-switch-btn" onclick="switchPartnerCamera()" title="Switch Main Camera">🔄👥</button>
-            <button class="ctrl-btn" id="rec-btn" onclick="toggleRecord()" title="Record Video">⏺️</button>
-            <button class="ctrl-btn" onclick="capturePhoto()" title="Capture Photo">📸</button>
             <button class="ctrl-btn" id="mic-toggle-btn" onclick="toggleMic()" title="Mute/Unmute Voice">🎤</button>
             <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect & Shutdown">❌</button>
         </div>
@@ -220,12 +217,13 @@
     let localStream = null;
     let currentCall = null;
     let dataConnection = null;
-    let isCameraActive = true; // ক্যামেরা শুরুতেই সক্রিয় থাকবে
+    let isCameraActive = true; 
     let isMicMuted = false;
     let usingFrontCamera = true;
     let isRecording = false;
     let mediaRecorder;
     let recordedChunks = [];
+    let currentResolutionLevel = 'high'; // high, medium, low
 
     peer.on('open', () => {
         document.getElementById('status-text').innerText = "Status: Ready & Connecting Automatically...";
@@ -233,18 +231,90 @@
     });
 
     function autoStartEverything() {
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 },
+                facingMode: usingFrontCamera ? 'user' : 'environment'
+            }, 
+            audio: true 
+        }).then(stream => {
             localStream = stream;
-            // ক্যামেরা সরাসরি অন রাখা হলো
             localStream.getVideoTracks().forEach(t => t.enabled = true);
             document.getElementById('local-video').srcObject = localStream;
             document.getElementById('local-pip-box').style.display = 'block';
 
             connectToMainAndData(localStream);
+            
+            // নেটওয়ার্ক স্পিড মনিটরিং ও অটো রেজোলিউশন অ্যাডজাস্টমেন্ট চালু করা হলো
+            startNetworkQualityMonitor();
         }).catch(err => {
             console.log("Media permission error:", err);
             document.getElementById('status-text').innerText = "Status: Camera/Mic permission needed!";
         });
+    }
+
+    // নেটওয়ার্ক স্পিড মনিটর করার ফাংশন
+    function startNetworkQualityMonitor() {
+        setInterval(async () => {
+            if (!currentCall || !currentCall.peerConnection) return;
+            
+            try {
+                const stats = await currentCall.peerConnection.getStats();
+                let currentRTT = null;
+
+                stats.forEach(report => {
+                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                        currentRTT = report.currentRoundTripTime; // সেকেন্ডে
+                    }
+                });
+
+                if (currentRTT !== null) {
+                    if (currentRTT > 0.35) { // নেট খুব স্লো হলে
+                        if (currentResolutionLevel !== 'low') {
+                            setCameraResolution('low');
+                        }
+                    } else if (currentRTT > 0.2) { // নেট মিডিয়াম হলে
+                        if (currentResolutionLevel !== 'medium') {
+                            setCameraResolution('medium');
+                        }
+                    } else { // নেট ভালো থাকলে
+                        if (currentResolutionLevel !== 'high') {
+                            setCameraResolution('high');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Error getting stats:", e);
+            }
+        }, 4000); // প্রতি ৪ সেকেন্ড পর পর চেক করবে
+    }
+
+    // রেজোলিউশন ডাইনামিকালি পরিবর্তনের ফাংশন
+    async function setCameraResolution(level) {
+        if (!localStream) return;
+        
+        let constraints = {};
+        if (level === 'low') {
+            constraints = { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { max: 15 } };
+            currentResolutionLevel = 'low';
+            console.log("Network slow: Switching to Low Resolution (240p)");
+        } else if (level === 'medium') {
+            constraints = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { max: 24 } };
+            currentResolutionLevel = 'medium';
+            console.log("Network medium: Switching to Medium Resolution (480p)");
+        } else {
+            constraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { max: 30 } };
+            currentResolutionLevel = 'high';
+            console.log("Network good: Switching to High Resolution (720p HD)");
+        }
+
+        try {
+            const videoTrack = localStream.getVideoTracks()[0];
+            await videoTrack.applyConstraints(constraints);
+        } catch (err) {
+            console.log("Could not apply resolution constraints: ", err);
+        }
     }
 
     function connectToMainAndData(stream) {
@@ -293,13 +363,17 @@
         }
 
         if (!localStream) {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                audio: true 
+            }).then(stream => {
                 localStream = stream;
                 localStream.getVideoTracks().forEach(t => t.enabled = true);
                 document.getElementById('local-video').srcObject = localStream;
                 document.getElementById('local-pip-box').style.display = 'block';
                 call.answer(localStream);
                 setupCallEvents(call);
+                startNetworkQualityMonitor();
             });
         } else {
             call.answer(localStream);
@@ -362,8 +436,15 @@
     async function switchCamera() {
         usingFrontCamera = !usingFrontCamera;
         try {
+            let targetConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } };
+            if (currentResolutionLevel === 'low') {
+                targetConstraints = { width: { ideal: 320 }, height: { ideal: 240 } };
+            } else if (currentResolutionLevel === 'medium') {
+                targetConstraints = { width: { ideal: 640 }, height: { ideal: 480 } };
+            }
+
             const newStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, 
+                video: { ...targetConstraints, facingMode: usingFrontCamera ? 'user' : 'environment' }, 
                 audio: true 
             });
             const oldAudioTrack = localStream.getAudioTracks()[0];
