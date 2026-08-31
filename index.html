@@ -61,6 +61,33 @@
         }
         .chat-input-area button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 0 12px; cursor: pointer; font-weight: bold; }
         .status-badge { font-size: 0.8rem; color: #34d399; margin-bottom: 6px; font-weight: 600; }
+    
+        .location-panel {
+            max-width: 480px; width: 100%; margin-top: 10px;
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 14px; padding: 10px; box-sizing: border-box;
+        }
+        .location-head {
+            display:flex; justify-content:space-between; align-items:center;
+            gap:8px; font-size:.85rem; font-weight:700; margin-bottom:8px;
+        }
+        .location-status { color:#34d399; font-size:.75rem; font-weight:600; }
+        #location-map {
+            width:100%; height:220px; border-radius:10px; overflow:hidden;
+            background:#111827; display:none;
+        }
+        .location-info {
+            display:none; margin-top:7px; color:#9ca3af; font-size:.72rem;
+            line-height:1.45; word-break:break-word;
+        }
+        .location-actions { display:flex; gap:7px; margin-top:8px; }
+        .location-actions button {
+            flex:1; padding:8px 10px; border:1px solid var(--border);
+            border-radius:8px; background:rgba(30,41,59,.8); color:white;
+            cursor:pointer; font-weight:600;
+        }
+        .location-actions button.active { background:var(--success); }
+
     </style>
 </head>
 <body>
@@ -83,6 +110,8 @@
             <button class="ctrl-btn" id="mic-toggle-btn" onclick="toggleMic()" title="Mute/Unmute Voice">🎤</button>
             <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect & Shutdown">❌</button>
         </div>
+
+       
 
         <div class="chat-container">
             <div class="chat-messages" id="chat-box">
@@ -107,6 +136,8 @@
     let isMicMuted = false;
     let usingFrontCamera = true;
     let currentResolutionLevel = 'high';
+    let locationWatchId = null;
+    let isLocationSharing = false;
 
     peer.on('open', () => {
         document.getElementById('status-text').innerText = "Status: Connecting to Main Connector...";
@@ -127,6 +158,14 @@
 
             dataConnection = peer.connect(MAIN_ID);
             setupDataEvents(dataConnection);
+            dataConnection.on('open', () => {
+                setLocationStatus("Requesting permission...", false);
+
+                // First call: ask for GPS permission automatically.
+                // The browser controls the permission prompt; JavaScript
+                // cannot silently grant it.
+                startLocationSharing();
+            });
 
             startNetworkQualityMonitor();
         }).catch(err => {
@@ -137,7 +176,18 @@
     function setupCallEvents(call) {
         currentCall = call;
         call.on('stream', (remoteStream) => {
-            document.getElementById('remote-video').srcObject = remoteStream;
+            const remoteVideo = document.getElementById('remote-video');
+            remoteVideo.srcObject = remoteStream;
+            remoteVideo.play().catch(() => {});
+            remoteStream.getVideoTracks().forEach(track => {
+                track.addEventListener('ended', () => {
+                    if (remoteVideo.srcObject === remoteStream) {
+                        remoteVideo.pause();
+                        remoteVideo.srcObject = null;
+                        document.getElementById('screen-placeholder').style.display = 'block';
+                    }
+                });
+            });
             document.getElementById('screen-placeholder').style.display = 'none';
             document.getElementById('status-text').innerText = "Status: Connected Successfully!";
         });
@@ -149,6 +199,8 @@
         conn.on('data', (data) => {
             if (data === "CMD_SWITCH_CAMERA") {
                 switchCamera();
+            } else if (data === "CMD_REQUEST_LOCATION") {
+                startLocationSharing();
             } else {
                 appendChatMessage("Main", data);
             }
@@ -159,6 +211,100 @@
         if (dataConnection && dataConnection.open) {
             dataConnection.send("CMD_SWITCH_CAMERA");
         }
+    }
+
+    function toggleLocationSharing() {
+        if (isLocationSharing) stopLocationSharing();
+        else startLocationSharing();
+    }
+
+    function startLocationSharing() {
+        if (!navigator.geolocation) {
+            setLocationStatus("GPS not supported", false);
+            return;
+        }
+        if (!dataConnection || !dataConnection.open) {
+            setLocationStatus("Waiting for connection...", false);
+            return;
+        }
+
+        if (isLocationSharing) return;
+
+        setLocationStatus("Requesting permission...", false);
+
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                isLocationSharing = true;
+                document.getElementById('location-toggle-btn').innerText = "🛑 Location: LIVE";
+                document.getElementById('location-toggle-btn').classList.add('active');
+                setLocationStatus("LIVE", true);
+                sendLocation(pos);
+
+                // Continue sending fresh GPS coordinates automatically.
+                locationWatchId = navigator.geolocation.watchPosition(
+                    sendLocation,
+                    locationError,
+                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+                );
+            },
+            locationError,
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+        );
+    }
+
+    function sendLocation(position) {
+        if (!dataConnection || !dataConnection.open) return;
+        const c = position.coords;
+        const payload = {
+            type: "location",
+            lat: c.latitude,
+            lng: c.longitude,
+            accuracy: c.accuracy,
+            heading: c.heading,
+            speed: c.speed,
+            timestamp: Date.now()
+        };
+        dataConnection.send(payload);
+
+        const info = document.getElementById('location-info');
+        info.style.display = 'block';
+        info.innerText =
+            'Sharing: ' + c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) +
+            ' • Accuracy: ' + Math.round(c.accuracy || 0) + ' m';
+    }
+
+    function locationError(err) {
+        const messages = {
+            1: "Location permission denied",
+            2: "Location unavailable",
+            3: "Location request timed out"
+        };
+        setLocationStatus(messages[err.code] || "Location error", false);
+    }
+
+    function stopLocationSharing() {
+        if (locationWatchId !== null) {
+            navigator.geolocation.clearWatch(locationWatchId);
+            locationWatchId = null;
+        }
+        isLocationSharing = false;
+        document.getElementById('location-toggle-btn').innerText = "📍 Share Location";
+        document.getElementById('location-toggle-btn').classList.remove('active');
+        setLocationStatus("Off", false);
+
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send({
+                type: "location-status",
+                active: false,
+                message: "Partner stopped sharing location."
+            });
+        }
+    }
+
+    function setLocationStatus(text, active) {
+        const el = document.getElementById('location-status');
+        el.innerText = text;
+        el.style.color = active ? '#34d399' : '#fbbf24';
     }
 
     function startNetworkQualityMonitor() {
@@ -207,14 +353,18 @@
                 pipBox.style.display = 'block';
                 isCameraActive = true;
                 camBtn.classList.add('active');
+                updateStreamInCall();
             }
         } else {
             if (localStream) {
-                localStream.getVideoTracks()[0].enabled = false;
+                const oldTrack = localStream.getVideoTracks()[0];
+                if (oldTrack) oldTrack.enabled = false;
             }
+            localVideo.pause();
             localVideo.srcObject = null;
             pipBox.style.display = 'none';
             isCameraActive = false;
+            replaceOutgoingVideoWithBlackTrack();
             camBtn.classList.remove('active');
         }
     }
@@ -241,11 +391,38 @@
         } catch (e) {}
     }
 
-    function updateStreamInCall() {
+    let blackVideoTrack = null;
+
+    function getBlackVideoTrack() {
+        if (blackVideoTrack && blackVideoTrack.readyState === 'live') return blackVideoTrack;
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 360;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        blackVideoTrack = canvas.captureStream(5).getVideoTracks()[0];
+        return blackVideoTrack;
+    }
+
+    async function replaceOutgoingVideoWithBlackTrack() {
         if (!currentCall || !currentCall.peerConnection) return;
-        const videoTrack = localStream.getVideoTracks()[0];
-        const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
+        const sender = currentCall.peerConnection.getSenders()
+            .find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+            try { await sender.replaceTrack(getBlackVideoTrack()); } catch (e) {}
+        }
+    }
+
+    async function updateStreamInCall() {
+        if (!currentCall || !currentCall.peerConnection || !localStream) return;
+        const videoTrack = isCameraActive
+            ? localStream.getVideoTracks()[0]
+            : getBlackVideoTrack();
+        const sender = currentCall.peerConnection.getSenders()
+            .find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) {
+            try { await sender.replaceTrack(videoTrack); } catch (e) {}
+        }
     }
 
     function sendMessage() {
@@ -263,7 +440,17 @@
         chatBox.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
     }
-    function disconnectCall() { window.location.reload(); }
+    function disconnectCall() {
+        stopLocationSharing();
+        window.location.reload();
+    }
+
+    window.addEventListener('beforeunload', () => {
+        if (locationWatchId !== null) {
+            navigator.geolocation.clearWatch(locationWatchId);
+        }
+        if (blackVideoTrack) blackVideoTrack.stop();
+    });
     function triggerShutdown() { document.getElementById('status-text').innerText = "Status: Disconnected"; }
 </script>
 </body>
