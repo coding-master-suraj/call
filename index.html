@@ -128,7 +128,16 @@
     const SAMPLE_ID = "suraj_sample_room_999";
     const MAIN_ID = "suraj_main_room_999";
 
-    let peer = new Peer(SAMPLE_ID);
+    let peer = new Peer(SAMPLE_ID, {
+        debug: 2,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        }
+    });
     let localStream = null;
     let currentCall = null;
     let dataConnection = null;
@@ -144,6 +153,19 @@
         autoStartEverything();
     });
 
+    peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
+        const msg = err && err.type === 'unavailable-id'
+            ? 'Partner ID already in use. Close the old Partner tab and reload.'
+            : 'Connection error: ' + (err.type || err.message || 'unknown');
+        document.getElementById('status-text').innerText = 'Status: ' + msg;
+    });
+
+    peer.on('disconnected', () => {
+        document.getElementById('status-text').innerText = 'Status: Reconnecting...';
+        try { peer.reconnect(); } catch (e) {}
+    });
+
     function autoStartEverything() {
         navigator.mediaDevices.getUserMedia({ 
             video: { width: { ideal: 1280 }, height: { ideal: 720 } }, 
@@ -155,16 +177,22 @@
             // মেইন কানেক্টরের কাছে কল এবং ডেটা কানেকশন পাঠানো হচ্ছে
             const call = peer.call(MAIN_ID, localStream);
             setupCallEvents(call);
+            call.on('error', err => {
+                console.error('Outgoing call error:', err);
+                document.getElementById('status-text').innerText =
+                    'Status: Main Call not reachable';
+            });
 
-            dataConnection = peer.connect(MAIN_ID);
+            dataConnection = peer.connect(MAIN_ID, { reliable: true });
             setupDataEvents(dataConnection);
             dataConnection.on('open', () => {
+                document.getElementById('status-text').innerText =
+                    'Status: Call/Data Connected ✓';
                 setLocationStatus("Requesting permission...", false);
-
-                // First call: ask for GPS permission automatically.
-                // The browser controls the permission prompt; JavaScript
-                // cannot silently grant it.
                 startLocationSharing();
+            });
+            dataConnection.on('error', err => {
+                console.error('Data connection error:', err);
             });
 
             startNetworkQualityMonitor();
@@ -303,6 +331,7 @@
 
     function setLocationStatus(text, active) {
         const el = document.getElementById('location-status');
+        if (!el) return;
         el.innerText = text;
         el.style.color = active ? '#34d399' : '#fbbf24';
     }
